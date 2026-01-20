@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Through Our Eyes: Reimagining Masterpieces</title>
+    <title>La Mia Bacheca</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -53,12 +53,35 @@
         );
 
         function PadletBoard() {
+            // Sistema Multi-Utente - MODIFICA QUI LE PASSWORD E GLI UTENTI
+            const USERS = {
+                'admin': { password: 'admin123', role: 'admin', name: 'Amministratore' },
+                'admin2': { password: 'super456', role: 'admin', name: 'Secondo Admin' },
+                'mario': { password: 'mario456', role: 'editor', name: 'Mario Rossi' },
+                'laura': { password: 'laura789', role: 'editor', name: 'Laura Bianchi' },
+                'ospite': { password: 'ospite123', role: 'viewer', name: 'Ospite' }
+            };
+
             const [notes, setNotes] = useState([]);
             const [isAdding, setIsAdding] = useState(false);
             const [newNote, setNewNote] = useState({ title: '', content: '', color: '#fef3c7', image: null });
             const [draggedNote, setDraggedNote] = useState(null);
             const [boardHeight, setBoardHeight] = useState(600);
             const boardRef = useRef(null);
+            
+            // Login states
+            const [isLoggedIn, setIsLoggedIn] = useState(false);
+            const [showLogin, setShowLogin] = useState(false);
+            const [loginUsername, setLoginUsername] = useState('');
+            const [loginPassword, setLoginPassword] = useState('');
+            const [currentUser, setCurrentUser] = useState(null);
+            
+            // Header edit states
+            const [boardTitle, setBoardTitle] = useState('La Mia Bacheca');
+            const [boardDescription, setBoardDescription] = useState('Benvenuto nella mia bacheca personale');
+            const [isEditingHeader, setIsEditingHeader] = useState(false);
+            const [tempTitle, setTempTitle] = useState('');
+            const [tempDescription, setTempDescription] = useState('');
 
             const colors = [
                 { name: 'Giallo', value: '#fef3c7' },
@@ -71,6 +94,7 @@
 
             useEffect(() => {
                 loadNotes();
+                loadBoardSettings();
             }, []);
 
             useEffect(() => {
@@ -82,10 +106,8 @@
                     setBoardHeight(600);
                     return;
                 }
-
-                // Calcola l'altezza necessaria in base alla posizione più bassa delle note
                 const maxY = Math.max(...notes.map(note => note.y));
-                const calculatedHeight = Math.max(600, (maxY + 40) * 10); // Aggiungi margine
+                const calculatedHeight = Math.max(600, (maxY + 40) * 10);
                 setBoardHeight(calculatedHeight);
             };
 
@@ -96,8 +118,59 @@
                 }
             };
 
+            const loadBoardSettings = () => {
+                const savedTitle = localStorage.getItem('board-title');
+                const savedDescription = localStorage.getItem('board-description');
+                if (savedTitle) setBoardTitle(savedTitle);
+                if (savedDescription) setBoardDescription(savedDescription);
+            };
+
             const saveNotes = (updatedNotes) => {
                 localStorage.setItem('padlet-notes', JSON.stringify(updatedNotes));
+            };
+
+            const handleLogin = () => {
+                const user = USERS[loginUsername.toLowerCase()];
+                
+                if (user && user.password === loginPassword) {
+                    setCurrentUser({ username: loginUsername.toLowerCase(), ...user });
+                    setIsLoggedIn(true);
+                    setShowLogin(false);
+                    setLoginUsername('');
+                    setLoginPassword('');
+                } else {
+                    alert('Username o password errati!');
+                    setLoginPassword('');
+                }
+            };
+
+            const handleLogout = () => {
+                setIsLoggedIn(false);
+                setCurrentUser(null);
+            };
+
+            const startEditingHeader = () => {
+                if (currentUser && currentUser.role === 'admin') {
+                    setTempTitle(boardTitle);
+                    setTempDescription(boardDescription);
+                    setIsEditingHeader(true);
+                } else {
+                    alert('Solo gli amministratori possono modificare titolo e descrizione!');
+                }
+            };
+
+            const saveHeaderChanges = () => {
+                setBoardTitle(tempTitle);
+                setBoardDescription(tempDescription);
+                localStorage.setItem('board-title', tempTitle);
+                localStorage.setItem('board-description', tempDescription);
+                setIsEditingHeader(false);
+            };
+
+            const cancelHeaderEdit = () => {
+                setIsEditingHeader(false);
+                setTempTitle('');
+                setTempDescription('');
             };
 
             const handleImageUpload = (e) => {
@@ -117,7 +190,7 @@
                         ...newNote,
                         id: Date.now(),
                         x: Math.random() * 60,
-                        y: Math.random() * 40 // Posizione iniziale più in alto
+                        y: Math.random() * 40
                     };
                     const updatedNotes = [...notes, note];
                     setNotes(updatedNotes);
@@ -128,9 +201,13 @@
             };
 
             const deleteNote = (id) => {
-                const updatedNotes = notes.filter(n => n.id !== id);
-                setNotes(updatedNotes);
-                saveNotes(updatedNotes);
+                if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'editor')) {
+                    const updatedNotes = notes.filter(n => n.id !== id);
+                    setNotes(updatedNotes);
+                    saveNotes(updatedNotes);
+                } else {
+                    alert('Non hai i permessi per eliminare note!');
+                }
             };
 
             const handleDragStart = (e, note) => {
@@ -163,19 +240,108 @@
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
                     <div className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h1 className="text-3xl font-bold text-gray-800 text-center">Through Our Eyes: Reimagining Masterpieces</h1>
-                            <button
-                                onClick={() => setIsAdding(!isAdding)}
-                                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
-                            >
-                                <Plus size={20} />
-                                Nuova Nota
-                            </button>
+                        <div className="mb-6">
+                            {/* Pulsanti Login/Logout in alto a destra */}
+                            <div className="flex justify-end mb-4">
+                                {!isLoggedIn ? (
+                                    <button
+                                        onClick={() => setShowLogin(true)}
+                                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
+                                    >
+                                        Login Admin
+                                    </button>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <span className="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">
+                                            👤 {currentUser?.name || 'Utente'} ({currentUser?.role || ''})
+                                        </span>
+                                        <button
+                                            onClick={handleLogout}
+                                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+                                        >
+                                            Logout
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Header della bacheca */}
+                            <div className="text-center mb-6">
+                                {!isEditingHeader ? (
+                                    <div>
+                                        <div className="flex items-center justify-center gap-3">
+                                            <h1 className="text-4xl font-bold text-gray-800">{boardTitle}</h1>
+                                            {isLoggedIn && currentUser?.role === 'admin' && (
+                                                <button
+                                                    onClick={startEditingHeader}
+                                                    className="text-blue-600 hover:text-blue-800 text-sm underline"
+                                                >
+                                                    Modifica
+                                                </button>
+                                            )}
+                                        </div>
+                                        <p className="text-gray-600 mt-2">{boardDescription}</p>
+                                    </div>
+                                ) : (
+                                    <div className="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+                                        <h2 className="text-xl font-semibold mb-4">Modifica intestazione</h2>
+                                        <input
+                                            type="text"
+                                            value={tempTitle}
+                                            onChange={(e) => setTempTitle(e.target.value)}
+                                            placeholder="Titolo bacheca"
+                                            className="w-full p-3 border border-gray-300 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                        <textarea
+                                            value={tempDescription}
+                                            onChange={(e) => setTempDescription(e.target.value)}
+                                            placeholder="Descrizione bacheca"
+                                            className="w-full p-3 border border-gray-300 rounded mb-4 h-20 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={saveHeaderChanges}
+                                                className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                                            >
+                                                Salva
+                                            </button>
+                                            <button
+                                                onClick={cancelHeaderEdit}
+                                                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                                            >
+                                                Annulla
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Pulsante Nuova Nota */}
+                            <div className="flex justify-center">
+                                {currentUser && (currentUser.role === 'admin' || currentUser.role === 'editor') && (
+                                    <button
+                                        onClick={() => setIsAdding(!isAdding)}
+                                        className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition shadow-lg"
+                                    >
+                                        <Plus size={20} />
+                                        Nuova Nota
+                                    </button>
+                                )}
+                                {currentUser && currentUser.role === 'viewer' && (
+                                    <div className="text-gray-500 italic">
+                                        Modalità solo lettura - non puoi aggiungere note
+                                    </div>
+                                )}
+                                {!currentUser && (
+                                    <div className="text-gray-500 italic">
+                                        Effettua il login per aggiungere note
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {isAdding && (
-                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6 max-w-md">
+                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6 max-w-md mx-auto">
                                 <h2 className="text-xl font-semibold mb-4">Crea una nota</h2>
                                 
                                 <input
@@ -305,6 +471,71 @@
                             )}
                         </div>
                     </div>
+
+                    {/* Modal Login */}
+                    {showLogin && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full">
+                                <h2 className="text-2xl font-bold mb-6 text-gray-800">Login</h2>
+                                
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Username
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={loginUsername}
+                                        onChange={(e) => setLoginUsername(e.target.value)}
+                                        placeholder="Inserisci username"
+                                        className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        autoFocus
+                                    />
+                                </div>
+                                
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={loginPassword}
+                                        onChange={(e) => setLoginPassword(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                                        placeholder="Inserisci password"
+                                        className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div className="mb-6 p-4 bg-gray-50 rounded text-xs">
+                                    <p className="font-semibold mb-2">Utenti di esempio:</p>
+                                    <ul className="space-y-1 text-gray-600">
+                                        <li>👑 <strong>admin</strong> o <strong>admin2</strong> - Possono modificare tutto</li>
+                                        <li>✏️ <strong>mario</strong> / <strong>laura</strong> - Possono aggiungere note</li>
+                                        <li>👁️ <strong>ospite</strong> - Solo visualizzazione</li>
+                                    </ul>
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleLogin}
+                                        className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                                    >
+                                        Accedi
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowLogin(false);
+                                            setLoginUsername('');
+                                            setLoginPassword('');
+                                        }}
+                                        className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                                    >
+                                        Annulla
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
